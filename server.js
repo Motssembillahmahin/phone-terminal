@@ -3,7 +3,24 @@ const WebSocket = require('ws');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 const pty = require('node-pty');
+
+// Load .env file if it exists
+try {
+  const envFile = fs.readFileSync(path.join(__dirname, '.env'), 'utf-8');
+  for (const line of envFile.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eq = trimmed.indexOf('=');
+      if (eq > 0) {
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim();
+        if (!process.env[key]) process.env[key] = val;
+      }
+    }
+  }
+} catch {}
 
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
@@ -103,6 +120,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  Network: http://${ip}:${PORT}`);
   if (AUTH_TOKEN) {
     console.log(`  Auth:    token required`);
+    console.log(`  Token:   ${AUTH_TOKEN}`);
   }
   console.log('  ' + '-'.repeat(30));
   console.log();

@@ -54,6 +54,8 @@ Connect to your home VPN first, then use the local IP like you're on the same Wi
 
 ## Configuration
 
+### Environment variables
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3000 | Web server port |
@@ -62,6 +64,29 @@ Connect to your home VPN first, then use the local IP like you're on the same Wi
 
 ```bash
 PORT=8080 AUTH_TOKEN=mysecret SHELL=/usr/bin/zsh npm start
+```
+
+### Using `.env` file (recommended)
+
+Create a `.env` file in the project root so you don't have to type the token every time:
+
+```bash
+# Generate a token and save it
+echo "AUTH_TOKEN=$(python3 gen-token.py)" > .env
+
+# Or set your own
+echo "AUTH_TOKEN=your-secret-password" >> .env
+
+# Start — token is loaded automatically
+npm start
+```
+
+The server prints the active token at startup so you can copy it to your phone.
+
+```bash
+# Example output:
+#   Auth:    token required
+#   Token:   h7tElJp1xttGeHgjQgbybRWAPyIfs9Ya
 ```
 
 ## Security

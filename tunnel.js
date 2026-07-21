@@ -1,6 +1,24 @@
 const { spawn, execSync } = require('child_process');
 const http = require('http');
 const net = require('net');
+const path = require('path');
+const fs = require('fs');
+
+// Load .env file if it exists
+try {
+  const envFile = fs.readFileSync(path.join(__dirname, '.env'), 'utf-8');
+  for (const line of envFile.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const eq = trimmed.indexOf('=');
+      if (eq > 0) {
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim();
+        if (!process.env[key]) process.env[key] = val;
+      }
+    }
+  }
+} catch {}
 
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
@@ -35,6 +53,12 @@ async function main() {
     require('./server');
     // Give server a moment to start
     await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (AUTH_TOKEN) {
+    console.log(`  Token:   ${AUTH_TOKEN}`);
+  } else {
+    console.log('  Token:   NONE — set AUTH_TOKEN for security');
   }
 
   if (checkBinary('cloudflared')) {
