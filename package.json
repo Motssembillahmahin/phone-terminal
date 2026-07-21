@@ -4,7 +4,8 @@
   "description": "Web-based terminal accessible from any device on your local network",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "tunnel": "node tunnel.js"
   },
   "license": "MIT",
   "dependencies": {
