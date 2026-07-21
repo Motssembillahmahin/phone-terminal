@@ -1,0 +1,15 @@
+{
+  "name": "phone-terminal",
+  "version": "1.0.0",
+  "description": "Web-based terminal accessible from any device on your local network",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-pty": "^1.0.0",
+    "ws": "^8.16.0"
+  }
+}

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Phone Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="auth-screen">
+    <form id="auth-form">
+      <h2>Phone Terminal</h2>
+      <input type="password" id="token-input" placeholder="Access token" autocomplete="off">
+      <button type="submit">Connect</button>
+      <p id="auth-error"></p>
+    </form>
+  </div>
+  <div id="terminal-container" style="display:none"></div>
+  <div id="status">Connecting...</div>
+  <div id="reconnect-btn" style="display:none">
+    <button onclick="location.reload()">Reconnect</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="terminal.js"></script>
+</body>
+</html>
