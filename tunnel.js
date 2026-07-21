@@ -1,10 +1,18 @@
 const { spawn, execSync } = require('child_process');
+const http = require('http');
+const net = require('net');
 
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
 
-// Start the terminal server first
-const server = require('./server');
+function isPortInUse(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(true));
+    server.once('listening', () => { server.close(); resolve(false); });
+    server.listen(port, '127.0.0.1');
+  });
+}
 
 function checkBinary(name) {
   try {
@@ -13,94 +21,108 @@ function checkBinary(name) {
   } catch { return false; }
 }
 
-function waitForServer(url, cb, attempt = 0) {
-  if (attempt > 30) return cb(new Error('timeout'));
-  const req = http.get(url, (res) => { res.resume(); cb(null); });
-  req.on('error', () => {
-    setTimeout(() => waitForServer(url, cb, attempt + 1), 500);
-  });
-  req.end();
-}
-
-function startCloudflared() {
-  console.log('  Starting Cloudflare Tunnel...');
-  const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${PORT}`], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  const handler = (data) => {
-    const text = data.toString();
-    const match = text.match(/https:\/\/[a-zA-Z0-9.-]+\.trycloudflare\.com/);
-    if (match) {
-      const url = match[0];
-      console.log(`  Public URL: ${url}`);
-      console.log(`  Auth:       ${AUTH_TOKEN ? 'token required' : 'none'}`);
-      console.log();
-      console.log(`  Open this URL in your phone browser from anywhere.`);
-      console.log();
-    }
-  };
-
-  proc.stdout.on('data', handler);
-  proc.stderr.on('data', handler);
-
-  proc.on('exit', (code) => {
-    if (code !== 0) {
-      console.log('  cloudflared failed, trying ngrok...');
-      startNgrok();
-    }
-  });
-
-  return proc;
-}
-
-function startNgrok() {
-  console.log('  Starting ngrok tunnel...');
-  try { execSync('pkill -f "ngrok http" 2>/dev/null', { stdio: 'ignore' }); } catch {}
-
-  const proc = spawn('ngrok', ['http', String(PORT), '--log=stdout'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  const handler = (data) => {
-    const text = data.toString();
-    const match = text.match(/https:\/\/[a-zA-Z0-9]+\.ngrok\.(?:io|app)/);
-    if (match) {
-      console.log(`  Public URL: ${match[0]}`);
-      console.log(`  Auth:       ${AUTH_TOKEN ? 'token required' : 'none'}`);
-      console.log();
-      console.log(`  Open this URL in your phone browser from anywhere.`);
-      console.log();
-    }
-  };
-
-  proc.stdout.on('data', handler);
-  proc.stderr.on('data', handler);
-
-  proc.on('exit', (code) => {
-    if (code !== 0) console.log('  ngrok failed to start.');
-  });
-
-  return proc;
-}
-
-setTimeout(() => {
-  const http = require('http');
+async function main() {
+  console.log();
+  console.log('  Phone Terminal — Remote Access');
   console.log('  ' + '-'.repeat(35));
 
-  if (checkBinary('cloudflared')) {
-    startCloudflared();
-  } else if (checkBinary('ngrok')) {
-    startNgrok();
+  // Check if server is already running
+  const inUse = await isPortInUse(PORT);
+  if (inUse) {
+    console.log(`  Server detected on port ${PORT}, skipping startup.`);
   } else {
-    console.log('  No tunnel binary found.');
-    console.log('  Install one of:');
+    console.log(`  Starting server on port ${PORT}...`);
+    require('./server');
+    // Give server a moment to start
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  if (checkBinary('cloudflared')) {
+    await startCloudflared();
+  } else if (checkBinary('ngrok')) {
+    await startNgrok();
+  } else {
+    console.log('  No tunnel binary found. Install one:');
     console.log('    cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
     console.log('    ngrok:       https://ngrok.com/download');
     console.log();
-    console.log('  Or use SSH tunnel:');
-    console.log('    ssh -R 3000:localhost:3000 user@vps');
-    console.log();
     process.exit(1);
   }
-}, 1000);
+}
+
+function startCloudflared() {
+  return new Promise((resolve) => {
+    console.log('  Starting Cloudflare Tunnel...');
+    const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${PORT}`], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let urlFound = false;
+
+    const handler = (data) => {
+      const text = data.toString();
+      // cloudflared wraps the URL in ASCII box; match it broadly
+      const match = text.match(/https:\/\/[a-zA-Z0-9][a-zA-Z0-9.-]*\.trycloudflare\.com/);
+      if (match && !urlFound) {
+        urlFound = true;
+        console.log(`  Public URL: ${match[0]}`);
+        console.log(`  Auth:       ${AUTH_TOKEN ? 'token set ✓' : 'NONE — set AUTH_TOKEN for security'}`);
+        console.log();
+        console.log(`  Open this URL in your phone browser from anywhere.`);
+        console.log();
+      }
+    };
+
+    proc.stdout.on('data', handler);
+    proc.stderr.on('data', handler);
+
+    proc.on('exit', (code) => {
+      if (!urlFound) {
+        console.log('  cloudflared failed, trying ngrok...');
+        resolve(startNgrok());
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+function startNgrok() {
+  return new Promise((resolve) => {
+    console.log('  Starting ngrok tunnel...');
+    try { execSync('pkill -f "ngrok http" 2>/dev/null', { stdio: 'ignore' }); } catch {}
+
+    const proc = spawn('ngrok', ['http', String(PORT), '--log=stdout'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let urlFound = false;
+
+    const handler = (data) => {
+      const text = data.toString();
+      const match = text.match(/https:\/\/[a-zA-Z0-9][a-zA-Z0-9.-]*\.ngrok\.(?:io|app)/);
+      if (match && !urlFound) {
+        urlFound = true;
+        console.log(`  Public URL: ${match[0]}`);
+        console.log(`  Auth:       ${AUTH_TOKEN ? 'token set ✓' : 'NONE — set AUTH_TOKEN for security'}`);
+        console.log();
+        console.log(`  Open this URL in your phone browser from anywhere.`);
+        console.log();
+      }
+    };
+
+    proc.stdout.on('data', handler);
+    proc.stderr.on('data', handler);
+
+    proc.on('exit', (code) => {
+      if (!urlFound) {
+        console.log('  ngrok failed to start.');
+        resolve();
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+main().catch(console.error);
