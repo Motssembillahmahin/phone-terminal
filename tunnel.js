@@ -62,9 +62,9 @@ async function main() {
   }
 
   if (checkBinary('cloudflared')) {
-    await startCloudflared();
+    startCloudflared();
   } else if (checkBinary('ngrok')) {
-    await startNgrok();
+    startNgrok();
   } else {
     console.log('  No tunnel binary found. Install one:');
     console.log('    cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
@@ -75,39 +75,38 @@ async function main() {
 }
 
 function startCloudflared() {
-  return new Promise((resolve) => {
-    console.log('  Starting Cloudflare Tunnel...');
-    const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${PORT}`], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+  console.log('  Starting Cloudflare Tunnel...');
 
-    let urlFound = false;
+  const proc = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${PORT}`], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
-    const handler = (data) => {
-      const text = data.toString();
-      // cloudflared wraps the URL in ASCII box; match it broadly
-      const match = text.match(/https:\/\/[a-zA-Z0-9][a-zA-Z0-9.-]*\.trycloudflare\.com/);
-      if (match && !urlFound) {
-        urlFound = true;
-        console.log(`  Public URL: ${match[0]}`);
-        console.log(`  Auth:       ${AUTH_TOKEN ? 'token set ✓' : 'NONE — set AUTH_TOKEN for security'}`);
-        console.log();
-        console.log(`  Open this URL in your phone browser from anywhere.`);
-        console.log();
-      }
-    };
+  let urlFound = false;
 
-    proc.stdout.on('data', handler);
-    proc.stderr.on('data', handler);
+  const handler = (data) => {
+    const text = data.toString();
+    const match = text.match(/https:\/\/[a-zA-Z0-9][a-zA-Z0-9.-]*\.trycloudflare\.com/);
+    if (match && !urlFound) {
+      urlFound = true;
+      console.log(`  Public URL: ${match[0]}`);
+      console.log(`  Auth:       ${AUTH_TOKEN ? 'token set ✓' : 'NONE — set AUTH_TOKEN for security'}`);
+      console.log();
+      console.log(`  Open this URL in your phone browser from anywhere.`);
+      console.log();
+    }
+  };
 
-    proc.on('exit', (code) => {
-      if (!urlFound) {
-        console.log('  cloudflared failed, trying ngrok...');
-        resolve(startNgrok());
-      } else {
-        resolve();
-      }
-    });
+  proc.stdout.on('data', handler);
+  proc.stderr.on('data', handler);
+
+  proc.on('exit', (code) => {
+    if (!urlFound) {
+      console.log('  cloudflared failed, trying ngrok...');
+      startNgrok();
+    } else {
+      console.log(`  Tunnel disconnected (code ${code}), restarting in 5s...`);
+      setTimeout(() => startCloudflared(), 5000);
+    }
   });
 }
 

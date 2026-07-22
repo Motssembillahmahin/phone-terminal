@@ -36,25 +36,38 @@ function getWsUrl() {
 }
 
 let ws = null;
+let reconnectAttempt = 0;
 let reconnectTimer = null;
+let typedBuffer = [];
 
 function connect() {
   const authScreen = document.getElementById('auth-screen');
   const container = document.getElementById('terminal-container');
   const status = document.getElementById('status');
-  const reconnectBtn = document.getElementById('reconnect-btn');
 
-  status.textContent = 'Connecting...';
   status.style.display = 'block';
-  reconnectBtn.style.display = 'none';
+  status.style.background = '#e67e22';
+  if (reconnectAttempt > 0) {
+    status.textContent = `Reconnecting... (attempt ${reconnectAttempt})`;
+  } else {
+    status.textContent = 'Connecting...';
+  }
 
   ws = new WebSocket(getWsUrl());
 
   ws.onopen = () => {
-    // If auth token is stored, send it
+    reconnectAttempt = 0;
     const token = localStorage.getItem('auth_token');
     if (token) {
       ws.send(JSON.stringify({ type: 'auth', token }));
+    }
+
+    // Send any buffered input
+    if (typedBuffer.length > 0) {
+      for (const data of typedBuffer) {
+        ws.send(JSON.stringify({ type: 'input', data }));
+      }
+      typedBuffer = [];
     }
   };
 
@@ -70,15 +83,20 @@ function connect() {
     if (msg.type === 'auth_ok') {
       authScreen.style.display = 'none';
       container.style.display = 'block';
-      term.open(container);
-      fitAddon.fit();
+      if (!term.element) {
+        term.open(container);
+        fitAddon.fit();
+      }
       term.focus();
       status.style.display = 'none';
       return;
     }
 
+    if (msg.type === 'pong') {
+      return;
+    }
+
     if (msg.type === 'data') {
-      // Ensure terminal is open
       if (!term.element) {
         authScreen.style.display = 'none';
         container.style.display = 'block';
@@ -90,32 +108,54 @@ function connect() {
     }
   };
 
-  ws.onclose = (e) => {
-    status.textContent = 'Disconnected';
-    status.style.display = 'block';
-    reconnectBtn.style.display = 'block';
-    term.dispose();
+  ws.onclose = () => {
+    scheduleReconnect();
   };
 
   ws.onerror = () => {
-    status.textContent = 'Connection error';
-    status.style.display = 'block';
+    // onclose will fire after this
   };
 
-  term.onData((data) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'input', data }));
-    }
-  });
-
-  term.onResize(({ cols, rows }) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-    }
-  });
+  // Clear old listeners before adding new ones
+  term.offData(handleData);
+  term.offResize(handleResize);
+  term.onData(handleData);
+  term.onResize(handleResize);
 }
 
-// Auth form handler
+function handleData(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'input', data }));
+  } else {
+    // Buffer input for replay on reconnect
+    typedBuffer.push(data);
+  }
+}
+
+function handleResize({ cols, rows }) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+  }
+}
+
+function scheduleReconnect() {
+  const status = document.getElementById('status');
+  const reconnectBtn = document.getElementById('reconnect-btn');
+
+  status.textContent = 'Disconnected';
+  status.style.background = '#e74c3c';
+  status.style.display = 'block';
+  reconnectBtn.style.display = 'none';
+
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000);
+  reconnectAttempt++;
+
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    connect();
+  }, delay);
+}
+
 document.getElementById('auth-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('token-input');
@@ -132,17 +172,14 @@ document.getElementById('auth-form').addEventListener('submit', (e) => {
   }
 });
 
-// Handle resize
 window.addEventListener('resize', () => {
   if (fitAddon) fitAddon.fit();
 });
 
-// Orientation change for mobile
 screen.orientation && screen.orientation.addEventListener('change', () => {
   setTimeout(() => fitAddon.fit(), 300);
 });
 
-// Prevent zoom on double tap
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
   const now = Date.now();
