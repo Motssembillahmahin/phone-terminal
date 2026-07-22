@@ -4,6 +4,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const pty = require('node-pty');
 
 // Load .env file if it exists
@@ -25,6 +26,18 @@ try {
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
 const SHELL = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : 'bash');
+
+// Use tmux for persistent sessions if available
+function getShellCmd() {
+  const shell = SHELL;
+  if (os.platform() === 'win32') return { cmd: shell, args: [] };
+  try {
+    execSync('which tmux', { stdio: 'ignore' });
+    return { cmd: 'tmux', args: ['new-session', '-A', '-s', 'phone-terminal'] };
+  } catch {
+    return { cmd: shell, args: [] };
+  }
+}
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -93,8 +106,9 @@ wss.on('connection', (ws) => {
   });
 
   function startShell() {
-    shell = pty.spawn(SHELL, [], {
-      name: 'xterm-color',
+    const { cmd, args } = getShellCmd();
+    shell = pty.spawn(cmd, args, {
+      name: 'xterm-256color',
       cols: 80,
       rows: 24,
       cwd: process.env.HOME,
@@ -127,11 +141,13 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
+  const { cmd } = getShellCmd();
   console.log();
   console.log('  Phone Terminal');
   console.log('  ' + '-'.repeat(30));
   console.log(`  Local:   http://localhost:${PORT}`);
   console.log(`  Network: http://${ip}:${PORT}`);
+  console.log(`  Session: ${cmd === 'tmux' ? 'persistent (tmux)' : 'ephemeral'}`);
   if (AUTH_TOKEN) {
     console.log(`  Auth:    token required`);
     console.log(`  Token:   ${AUTH_TOKEN}`);

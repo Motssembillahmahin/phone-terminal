@@ -89,6 +89,19 @@ The server prints the active token at startup so you can copy it to your phone.
 #   Token:   h7tElJp1xttGeHgjQgbybRWAPyIfs9Ya
 ```
 
+## Persistent Sessions (tmux)
+
+When you disconnect, the terminal session normally dies. To keep processes running and resume where you left off, install **tmux**:
+
+```bash
+sudo apt install tmux   # Debian/Ubuntu
+brew install tmux       # macOS
+```
+
+When tmux is detected, the server auto-wraps your shell in a persistent tmux session. Reconnect and you're back to the exact same state — running processes, working directory, everything.
+
+To kill the session manually: `tmux kill-session -t phone-terminal`
+
 ## Security
 
 - **Always set `AUTH_TOKEN` when exposing to the internet**
