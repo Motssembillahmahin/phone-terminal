@@ -27,15 +27,15 @@ const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
 const SHELL = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : 'bash');
 
-// Use tmux for persistent sessions if available
+// Tmux for persistent sessions. Set TMUX_ENABLED=false to disable.
 function getShellCmd() {
-  const shell = SHELL;
-  if (os.platform() === 'win32') return { cmd: shell, args: [] };
+  const useTmux = process.env.TMUX_ENABLED !== 'false' && process.env.TMUX_ENABLED !== '0';
+  if (os.platform() === 'win32' || !useTmux) return { cmd: SHELL, args: [] };
   try {
     execSync('which tmux', { stdio: 'ignore' });
     return { cmd: 'tmux', args: ['new-session', '-A', '-s', 'phone-terminal'] };
   } catch {
-    return { cmd: shell, args: [] };
+    return { cmd: SHELL, args: [] };
   }
 }
 
